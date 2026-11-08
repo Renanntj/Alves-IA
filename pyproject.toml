@@ -38,6 +38,9 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+alves_ia = ["demo.html"]
+
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]

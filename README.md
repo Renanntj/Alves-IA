@@ -2,6 +2,23 @@
 
 A plataforma se chama **Alves-IA**, e seu agente de atendimento, **Alves-Agent**.
 
+## Experimentar a IA sem WhatsApp
+
+No `.env`, configure `APP_ENV=development`, `AI_PROVIDER=gemini` e sua
+`GEMINI_API_KEY` (ou `AI_PROVIDER=openai` e `OPENAI_API_KEY`). Então execute:
+
+```bash
+python -m uvicorn alves_ia.demo:app --host 127.0.0.1 --port 8001
+```
+
+Abra **http://127.0.0.1:8001**. Não precisa de Docker, banco ou WhatsApp.
+O histórico fica na memória da página e é apagado ao recarregar. As mensagens
+são enviadas ao provedor configurado e usam a cota da sua API. Não use dados
+reais de pacientes. Esta demonstração não possui ferramentas nem realiza
+agendamentos; ela usa a integração textual existente, anterior à Fase 3.
+Não publique essa aplicação por proxy ou na internet. O acesso remoto e o
+ambiente de produção são bloqueados. Reinicie o processo ao alterar o `.env`.
+
 A fundação de autenticação/PostgreSQL da Fase 1 está em implementação.
 Consulte [configuração, validação e pendências](docs/phase-1.md) antes de executar.
 A [Fase 2 — WhatsApp](docs/phase-2.md) inclui webhook assinado, Inbox/Outbox,

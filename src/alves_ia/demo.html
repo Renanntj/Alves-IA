@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alves-Agent · Laboratório</title>
+<style>
+  
+  *{box-sizing:border-box}body{margin:0;background:#10151c;color:#e6edf3;font:16px system-ui}
+  main{max-width:800px;margin:auto;padding:32px 20px}header{display:flex;justify-content:space-between;align-items:center;gap:20px}
+  h1{font-size:28px;margin:4px 0}small,#model{color:#91a6bc}button{cursor:pointer;border:0;border-radius:10px;padding:12px 16px;background:#69e3b0;color:#09271c;font-weight:700}
+  button:disabled{opacity:.5;cursor:wait}.notice{color:#aab8c7;font-size:14px;line-height:1.6}
+  #messages{min-height:40vh;margin:28px 0}.bubble{padding:16px 20px;margin:12px 0;border-radius:14px;background:#1b2633;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
+  .user{background:#183d35;margin-left:48px}.assistant{margin-right:48px}.label{font-size:12px;color:#9bb6c6;display:block;margin-bottom:6px}
+  form{display:flex;gap:12px;align-items:stretch}textarea{flex:1;min-width:0;resize:vertical;background:#1b2633;color:inherit;border:1px solid #394a5d;border-radius:10px;padding:14px;font:inherit}
+  #status{min-height:24px;color:#f3c68b;font-size:14px;margin:12px 0}footer{font-size:12px;color:#91a6bc;margin-top:24px}
+  @media(max-width:500px){main{padding:20px 12px}.user{margin-left:20px}.assistant{margin-right:20px}form{flex-direction:column}}
+</style>
+
+<main>
+  <header><div><small>ALVES-IA / LABORATÓRIO LOCAL</small><h1>Converse com Alves-Agent</h1></div><button id="clear" type="button">Nova conversa</button></header>
+  <p class="notice">Experimente a IA sem WhatsApp. Demonstração sem acesso a agendamentos ou dados de clínicas. Não envie dados pessoais: suas mensagens são enviadas ao provedor de IA configurado.</p>
+  <div id="model">O provedor e o modelo aparecerão após a primeira resposta.</div>
+  <section id="messages" role="log" aria-live="polite" aria-label="Conversa"></section>
+  <form id="form"><textarea id="input" aria-label="Sua mensagem" maxlength="4000" rows="3" placeholder="Ex.: Como você ajudaria uma recepção de clínica?" required></textarea><button id="send" type="submit">Enviar ↗</button></form>
+  <div id="status" role="status"></div>
+  <footer>Histórico apenas na memória desta página · contexto limitado às últimas 6 trocas · chamadas usam a cota da sua API</footer>
+</main>
+
+
+<script>
+const history=[];
+const messages=document.querySelector('#messages'), input=document.querySelector('#input');
+const send=document.querySelector('#send'), clear=document.querySelector('#clear'), status=document.querySelector('#status');
+function bubble(role,text){const box=document.createElement('div');box.className='bubble '+role;const label=document.createElement('span');label.className='label';label.textContent=role==='user'?'VOCÊ':'ALVES-AGENT';const content=document.createElement('span');content.textContent=text;box.append(label,content);messages.append(box);box.scrollIntoView({behavior:'smooth',block:'end'});return box;}
+clear.onclick=()=>{history.length=0;messages.replaceChildren();status.textContent='';input.value='';input.focus();};
+document.querySelector('#form').onsubmit=async(event)=>{
+ event.preventDefault();const text=input.value.trim();if(!text||send.disabled)return;
+ send.disabled=clear.disabled=true;status.textContent='Alves-Agent está pensando…';
+ const userBox=bubble('user',text);
+ try{
+  const turns=history.slice(-12).concat([{role:'user',content:text}]);
+  const response=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Demo-Request':'1'},body:JSON.stringify({messages:turns})});
+  const data=await response.json();if(!response.ok)throw new Error(typeof data.detail==='string'?data.detail:'Não foi possível enviar a mensagem.');
+  history.push({role:'user',content:text},{role:'assistant',content:data.reply});history.splice(0,Math.max(0,history.length-12));
+  bubble('assistant',data.reply);document.querySelector('#model').textContent=data.provider+' · '+data.model;
+  input.value='';status.textContent='';
+ }catch(error){userBox.remove();status.textContent=error.message||'Falha de conexão.';}
+ finally{send.disabled=clear.disabled=false;input.focus();}
+};
+</script>
+</html>
