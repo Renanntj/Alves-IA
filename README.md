@@ -2,6 +2,10 @@
 
 A plataforma se chama **Alves-IA**, e seu agente de atendimento, **Alves-Agent**.
 
+A fundação de autenticação/PostgreSQL da Fase 1 está em implementação.
+Consulte [configuração, validação e pendências](docs/phase-1.md) antes de executar.
+As fases seguintes ainda não estão disponíveis.
+
 Se o editor não resolver `from google import genai`, selecione o interpretador
 `.venv/bin/python` e instale as dependências nesse ambiente:
 

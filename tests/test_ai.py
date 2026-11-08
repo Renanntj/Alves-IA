@@ -46,4 +46,3 @@ class ProviderSelectionTests(TestCase):
 
         self.assertEqual(error.exception.errors()[0]["loc"], ("ai_provider",))
         self.assertEqual(error.exception.errors()[0]["type"], "literal_error")
-

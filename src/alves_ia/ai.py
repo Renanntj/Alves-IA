@@ -61,4 +61,3 @@ def create_provider(settings: Settings | None = None) -> AIProvider:
     if settings.ai_provider == "openai":
         return OpenAIProvider(settings.openai_api_key, settings.openai_model)
     raise ValueError(f"Provedor de IA não suportado: {settings.ai_provider}")
-

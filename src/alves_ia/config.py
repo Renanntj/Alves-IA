@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +17,11 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     timezone: str = "America/Recife"
+    agent_name: str = "Alves-Agent"
+    database_url: SecretStr = SecretStr("")
+    jwt_secret: SecretStr = SecretStr("")
+    jwt_issuer: str = "alves-ia"
+    jwt_audience: str = "alves-ia-api"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -28,4 +34,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: alves
+      POSTGRES_USER: alves_owner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Configure APP_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U alves_owner -d alves"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  migrate:
+    build: .
+    environment:
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?Configure MIGRATION_DATABASE_URL}
+    command: [alembic, upgrade, head]
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    build: .
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Configure DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:?Configure JWT_SECRET}
+      APP_NAME: Alves-IA
+      DEBUG: "false"
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+volumes:
+  postgres_data:
