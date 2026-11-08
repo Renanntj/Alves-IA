@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from .auth import router
 from .config import get_settings
+from .whatsapp.api import router as whatsapp_router
 
 settings = get_settings()
 
@@ -12,6 +13,7 @@ app = FastAPI(
     debug=settings.debug,
 )
 app.include_router(router)
+app.include_router(whatsapp_router)
 
 
 @app.get("/", tags=["meta"])

@@ -34,6 +34,30 @@ services:
       TEST_OWNER_DATABASE_URL: postgresql+psycopg://alves_owner:test-owner-only@db/alves_test
       TEST_DATABASE_URL: postgresql+psycopg://alves_app:test-app-only@db/alves_test
       JWT_SECRET: test-signing-key-not-for-production-123456789
+      REDIS_URL: redis://redis:6379/0
+      TEST_QUEUE: "1"
     depends_on:
       migrate:
         condition: service_completed_successfully
+      worker:
+        condition: service_started
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  worker:
+    build:
+      context: .
+      target: runtime
+    environment:
+      DATABASE_URL: postgresql+psycopg://alves_app:test-app-only@db/alves_test
+      REDIS_URL: redis://redis:6379/0
+    command: [celery, -A, alves_ia.whatsapp.tasks:app, worker, --loglevel=INFO, --concurrency=1]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy

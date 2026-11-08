@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     jwt_secret: SecretStr = SecretStr("")
     jwt_issuer: str = "alves-ia"
     jwt_audience: str = "alves-ia-api"
+    whatsapp_app_secret: SecretStr = SecretStr("")
+    whatsapp_verify_token: SecretStr = SecretStr("")
+    whatsapp_access_token: SecretStr = SecretStr("")
+    whatsapp_api_version: str = ""
+    redis_url: SecretStr = SecretStr("redis://redis:6379/0")
 
     model_config = SettingsConfigDict(
         env_file=".env",
