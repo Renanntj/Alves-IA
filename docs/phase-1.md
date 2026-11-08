@@ -17,6 +17,13 @@ para produção. As fases 2–7 ainda não foram implementadas.
 
 ## Executar localmente
 
+No Fedora/SELinux, o script de inicialização é montado com `ro,z`: leitura
+somente e rótulo compartilhado entre os containers de desenvolvimento e teste.
+Isso permite a leitura do arquivo sem desativar o SELinux. Se o container de
+teste já falhou ao ler o script, recrie somente o banco descartável de testes
+com `docker compose -p alves-ia-test -f compose.test.yaml up -d --force-recreate db`
+antes de repetir a suíte. A recriação descarta os dados temporários desse banco.
+
 1. Instale: `python -m pip install -e ".[dev]"`.
 2. Complete as novas variáveis de `.env.example` no `.env` existente, sem
    sobrescrever suas chaves. Gere três segredos distintos com
