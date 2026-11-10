@@ -2,7 +2,15 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, ForeignKeyConstraint, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -47,11 +55,14 @@ class Conversation(Base):
     phone_id: Mapped[str] = mapped_column(String(64))
     contact: Mapped[str] = mapped_column(String(32))
     last_inbound: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    state: Mapped[str] = mapped_column(String(20), default="BOT_ACTIVE")
+    assigned_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     __table_args__ = (
         UniqueConstraint("clinic_id", "phone_id", "contact"),
         ForeignKeyConstraint(
             ["clinic_id", "phone_id"], ["channel_routes.clinic_id", "channel_routes.phone_id"]
         ),
+        CheckConstraint("state IN ('BOT_ACTIVE', 'HUMAN_PENDING', 'HUMAN_ACTIVE', 'CLOSED')"),
     )
 
 
@@ -68,4 +79,48 @@ class Outbox(Base):
     provider_id: Mapped[str | None] = mapped_column(String(256))
     delivery_status: Mapped[str | None] = mapped_column(String(32))
     error_code: Mapped[str | None] = mapped_column(String(64))
+    origin: Mapped[str] = mapped_column(String(16), default="human")
     __table_args__ = (UniqueConstraint("clinic_id", "key"),)
+
+
+class ConversationEvent(Base):
+    __tablename__ = "whatsapp_conversation_events"
+    clinic_id: Mapped[UUID] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    conversation_id: Mapped[UUID] = mapped_column()
+    actor_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    action: Mapped[str] = mapped_column(String(24))
+    from_state: Mapped[str] = mapped_column(String(20))
+    to_state: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __table_args__ = (
+        ForeignKeyConstraint(["clinic_id"], ["clinics.id"]),
+        ForeignKeyConstraint(
+            ["clinic_id", "conversation_id"],
+            ["whatsapp_conversations.clinic_id", "whatsapp_conversations.id"],
+        ),
+    )
+
+
+class ConversationMessage(Base):
+    __tablename__ = "whatsapp_conversation_messages"
+    clinic_id: Mapped[UUID] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    conversation_id: Mapped[UUID] = mapped_column()
+    source_inbox_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    role: Mapped[str] = mapped_column(String(16))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["clinic_id", "conversation_id"],
+            ["whatsapp_conversations.clinic_id", "whatsapp_conversations.id"],
+        ),
+        ForeignKeyConstraint(
+            ["clinic_id", "source_inbox_id"], ["whatsapp_inbox.clinic_id", "whatsapp_inbox.id"]
+        ),
+        UniqueConstraint("clinic_id", "source_inbox_id"),
+        CheckConstraint("role IN ('user', 'assistant')"),
+        CheckConstraint("length(content) <= 4000"),
+    )

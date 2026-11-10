@@ -6,14 +6,16 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from alves_ia.auth import Database, current_identity
 from alves_ia.config import get_settings
 from alves_ia.security import Identity
 
-from .models import Conversation, Outbox
+from .handoff import HandoffAction
+from .models import Conversation, ConversationEvent, Outbox
 from .protocol import Event, parse_events, valid_signature
-from .service import enqueue_text, receive
+from .service import enqueue_text, receive, transition_conversation
 
 router = APIRouter(tags=["whatsapp"])
 Authenticated = Annotated[Identity, Depends(current_identity)]
@@ -80,7 +82,79 @@ def conversations(identity: Authenticated, session: Database) -> list[dict[str, 
         .limit(100)
     )
     return [
-        {"id": str(row.id), "contact": row.contact, "last_inbound": row.last_inbound.isoformat()}
+        {
+            "id": str(row.id),
+            "contact": row.contact,
+            "last_inbound": row.last_inbound.isoformat(),
+            "state": row.state,
+            "assigned_user_id": str(row.assigned_user_id or ""),
+        }
+        for row in rows
+    ]
+
+
+def apply_action(
+    conversation_id: UUID, identity: Identity, session: Session, action: HandoffAction
+) -> dict[str, str]:
+    try:
+        state, assigned_user_id = transition_conversation(
+            session, identity.clinic_id, conversation_id, identity.user_id, action
+        )
+    except LookupError as exc:
+        raise HTTPException(404, "Conversation not found") from exc
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {
+        "id": str(conversation_id),
+        "state": state,
+        "assigned_user_id": str(assigned_user_id or ""),
+    }
+
+
+@router.post("/v1/whatsapp/conversations/{conversation_id}/handoff")
+def handoff(conversation_id: UUID, identity: Authenticated, session: Database) -> dict[str, str]:
+    return apply_action(conversation_id, identity, session, HandoffAction.REQUEST)
+
+
+@router.post("/v1/whatsapp/conversations/{conversation_id}/claim")
+def claim(conversation_id: UUID, identity: Authenticated, session: Database) -> dict[str, str]:
+    return apply_action(conversation_id, identity, session, HandoffAction.CLAIM)
+
+
+@router.post("/v1/whatsapp/conversations/{conversation_id}/resume-bot")
+def resume_bot(conversation_id: UUID, identity: Authenticated, session: Database) -> dict[str, str]:
+    return apply_action(conversation_id, identity, session, HandoffAction.RESUME_BOT)
+
+
+@router.post("/v1/whatsapp/conversations/{conversation_id}/close")
+def close_conversation(
+    conversation_id: UUID, identity: Authenticated, session: Database
+) -> dict[str, str]:
+    return apply_action(conversation_id, identity, session, HandoffAction.CLOSE)
+
+
+@router.get("/v1/whatsapp/conversations/{conversation_id}/events")
+def conversation_events(
+    conversation_id: UUID, identity: Authenticated, session: Database
+) -> list[dict[str, str]]:
+    rows = session.scalars(
+        select(ConversationEvent)
+        .where(
+            ConversationEvent.clinic_id == identity.clinic_id,
+            ConversationEvent.conversation_id == conversation_id,
+        )
+        .order_by(ConversationEvent.created_at)
+    )
+    return [
+        {
+            "actor_user_id": str(row.actor_user_id),
+            "action": row.action,
+            "from_state": row.from_state,
+            "to_state": row.to_state,
+            "created_at": row.created_at.isoformat(),
+        }
         for row in rows
     ]
 
@@ -94,7 +168,12 @@ def send(
 ) -> dict[str, str]:
     try:
         job = enqueue_text(
-            session, identity.clinic_id, body.conversation_id, body.body, idempotency_key
+            session,
+            identity.clinic_id,
+            body.conversation_id,
+            body.body,
+            idempotency_key,
+            identity.user_id,
         )
         result = {"id": str(job.id), "state": job.state}
         session.commit()
@@ -102,6 +181,8 @@ def send(
     except LookupError as exc:
         raise HTTPException(404, "Conversation not found") from exc
     except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except PermissionError as exc:
         raise HTTPException(409, str(exc)) from exc
 
 

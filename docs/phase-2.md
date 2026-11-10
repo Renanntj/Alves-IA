@@ -24,6 +24,15 @@ de teste Meta. Nenhuma chamada real à Meta foi feita pelo agente.
   são classificadas como unknown após dois minutos.
 - Status de entrega não regride de read para delivered/sent. Eventos que
   chegam antes do registro do ID de saída aguardam até cinco novos ciclos.
+- Conversas têm estados `BOT_ACTIVE`, `HUMAN_PENDING`, `HUMAN_ACTIVE` e
+  `CLOSED`. Solicitar/assumir atendimento interrompe qualquer resposta
+  automática pendente; voltar ao bot exige ação explícita e auditada.
+- Envio humano requer conversa assumida pelo próprio atendente. Envio do bot
+  requer `BOT_ACTIVE`. Lock advisory por conversa serializa handoff e envio,
+  permanecendo retido durante a chamada ao provedor (timeout de 15 s).
+- Transições registram ator, ação, estados anterior/novo e horário em tabela
+  segregada por clínica. Admin/gestor pode devolver conversa atribuída a outro
+  atendente ao bot; demais atendentes só podem devolver a própria conversa.
 
 O registro global channel_routes contém apenas IDs de roteamento e situação,
 sem conteúdo ou credenciais. Todas as tabelas de conteúdo têm RLS forçada e
@@ -78,6 +87,9 @@ Os testes HTTP externos usam MockTransport; não consomem créditos Meta.
 - Templates fora da janela não estão implementados: a operação é recusada.
 - Áudio é preservado como evento recebido; download/transcrição pertencem à Fase 3.
 - Não há respostas automáticas de IA nesta fase.
+- O mecanismo de estados já impede envio de bot fora de `BOT_ACTIVE`; a resposta
+  automática do agente e a detecção semântica de pedido de atendente chegam na
+  Fase 3.
 - unknown exige análise do operador antes de decidir qualquer reenvio.
   Status sem correspondência ficam preservados na Inbox para reconciliação.
 - Rate limiting de entrada, política de retenção, painel de falhas e observabilidade

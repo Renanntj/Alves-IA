@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     ai_provider: Literal["gemini", "openai"] = "gemini"
+    ai_live_enabled: bool = False
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
     openai_api_key: str = ""

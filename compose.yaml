@@ -53,6 +53,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
       WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-}
+      AI_PROVIDER: ${AI_PROVIDER:-gemini}
+      AI_LIVE_ENABLED: ${AI_LIVE_ENABLED:-false}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
     command: [celery, -A, alves_ia.whatsapp.tasks:app, worker, --loglevel=INFO]
     depends_on:
       migrate:

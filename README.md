@@ -23,7 +23,18 @@ A fundação de autenticação/PostgreSQL da Fase 1 está em implementação.
 Consulte [configuração, validação e pendências](docs/phase-1.md) antes de executar.
 A [Fase 2 — WhatsApp](docs/phase-2.md) inclui webhook assinado, Inbox/Outbox,
 processamento Celery e envio de texto com controle da janela de atendimento.
-Está em homologação; as fases 3–7 ainda não estão disponíveis.
+
+### Atendimento com IA (Fase 3)
+
+O worker inicia com `AI_LIVE_ENABLED=false`. Para enviar mensagens recebidas ao
+provedor escolhido, habilite explicitamente essa variável e configure somente a
+chave do provedor em uso (`AI_PROVIDER=gemini` ou `AI_PROVIDER=openai`). O serviço
+da API não recebe as chaves dos provedores; elas ficam restritas ao worker.
+Mensagens e histórico são armazenados no PostgreSQL com isolamento por clínica.
+Considere os termos de retenção e tratamento de dados do provedor antes de
+habilitar em produção. Chamadas de ferramenta são limitadas ao pedido de
+atendimento humano; o worker valida os argumentos e executa a transição no
+backend. Não há execução de SQL ou ferramentas arbitrárias pelo modelo.
 
 Se o editor não resolver `from google import genai`, selecione o interpretador
 `.venv/bin/python` e instale as dependências nesse ambiente:

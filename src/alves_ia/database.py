@@ -25,7 +25,7 @@ def get_engine() -> Engine:
 
 
 def get_session() -> Iterator[Session]:
-    with Session(get_engine()) as session, session.begin():
+    with Session(get_engine()) as session:
         yield session
 
 
