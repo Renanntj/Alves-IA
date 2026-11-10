@@ -27,14 +27,31 @@ processamento Celery e envio de texto com controle da janela de atendimento.
 ### Atendimento com IA (Fase 3)
 
 O worker inicia com `AI_LIVE_ENABLED=false`. Para enviar mensagens recebidas ao
-provedor escolhido, habilite explicitamente essa variável e configure somente a
-chave do provedor em uso (`AI_PROVIDER=gemini` ou `AI_PROVIDER=openai`). O serviço
-da API não recebe as chaves dos provedores; elas ficam restritas ao worker.
-Mensagens e histórico são armazenados no PostgreSQL com isolamento por clínica.
-Considere os termos de retenção e tratamento de dados do provedor antes de
-habilitar em produção. Chamadas de ferramenta são limitadas ao pedido de
-atendimento humano; o worker valida os argumentos e executa a transição no
-backend. Não há execução de SQL ou ferramentas arbitrárias pelo modelo.
+provedor escolhido, habilite explicitamente essa variável. Texto usa o provedor
+em `AI_PROVIDER`; áudio usa Whisper/OpenAI, então `OPENAI_API_KEY` também é
+necessária quando o provedor de texto for Gemini. A API não recebe essas chaves;
+elas ficam restritas ao worker. Áudio é baixado em memória, limitado a 16 MiB,
+validado por host, MIME e SHA-256, e não é armazenado. Transcrição de baixa
+confiança ou falha de mídia pede atendimento humano. Consulte
+[detalhes e limites da Fase 3](docs/phase-3.md) antes de habilitar.
+
+Mensagens e transcrições são armazenadas no PostgreSQL com isolamento por
+clínica. Considere os termos de retenção e tratamento de dados dos provedores
+antes de habilitar em produção. Chamadas de ferramenta são limitadas ao pedido
+de atendimento humano e à busca opcional na planilha aprovada; o worker valida
+os argumentos e executa as ações no backend. Não há execução de SQL ou
+ferramentas arbitrárias pelo modelo.
+
+### Consulta a planilhas
+
+O primeiro conector é o Google Sheets em modo somente leitura. Um gestor
+conecta a conta Google da clínica e define uma planilha, uma faixa limitada e
+as colunas que o agente pode consultar. A IA pode buscar esses dados durante
+uma conversa; o worker envia ao provedor somente as linhas encontradas. Valores
+da planilha são tratados como conteúdo não confiável. A agenda e os
+agendamentos continuam tendo o PostgreSQL como fonte oficial. Importação de
+Excel/CSV poderá ser adicionada depois. Veja o [guia de configuração e os
+limites de segurança](docs/google-sheets.md).
 
 Se o editor não resolver `from google import genai`, selecione o interpretador
 `.venv/bin/python` e instale as dependências nesse ambiente:

@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     whatsapp_verify_token: SecretStr = SecretStr("")
     whatsapp_access_token: SecretStr = SecretStr("")
     whatsapp_api_version: str = ""
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: SecretStr = SecretStr("")
+    google_oauth_redirect_uri: str = ""
+    google_sheets_encryption_key: SecretStr = SecretStr("")
     redis_url: SecretStr = SecretStr("redis://redis:6379/0")
 
     model_config = SettingsConfigDict(

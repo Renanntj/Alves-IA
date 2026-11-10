@@ -85,8 +85,9 @@ Os testes HTTP externos usam MockTransport; não consomem créditos Meta.
 - O MVP usa um app Meta e um token de operador autorizado sobre os números
   cadastrados. Onboarding OAuth por clínica e cofre multi-app são evolução futura.
 - Templates fora da janela não estão implementados: a operação é recusada.
-- Áudio é preservado como evento recebido; download/transcrição pertencem à Fase 3.
-- Não há respostas automáticas de IA nesta fase.
+- Áudio é preservado como evento recebido; download e transcrição ficam no fluxo
+  assíncrono documentado na [Fase 3](phase-3.md).
+- A resposta automática de IA e o handoff estão na [Fase 3](phase-3.md).
 - O mecanismo de estados já impede envio de bot fora de `BOT_ACTIVE`; a resposta
   automática do agente e a detecção semântica de pedido de atendente chegam na
   Fase 3.

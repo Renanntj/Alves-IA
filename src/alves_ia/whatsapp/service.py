@@ -37,6 +37,9 @@ def conversation_lock(session: Session, clinic_id: UUID, conversation_id: UUID) 
         yield
     finally:
         session.execute(text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": lock_id})
+        # The unlock query autobegins a new transaction; close it so callers can
+        # start a fresh transaction after a committed state transition.
+        session.commit()
 
 
 def transition_conversation(
@@ -192,6 +195,17 @@ def ingest(session: Session, job: Outbox) -> None:
                         payload={"conversation_id": str(result.id), "inbox_id": str(event.id)},
                     )
                 )
+        elif item.get("type") == "audio" and get_settings().ai_live_enabled:
+            if result.state == ConversationState.BOT_ACTIVE.value:
+                session.add(
+                    Outbox(
+                        clinic_id=job.clinic_id,
+                        kind="transcribe_audio",
+                        key=f"audio:{event.id}",
+                        origin="agent",
+                        payload={"conversation_id": str(result.id), "inbox_id": str(event.id)},
+                    )
+                )
     else:
         outgoing = session.scalar(
             select(Outbox)
@@ -225,6 +239,7 @@ def enqueue_text(
 ) -> Outbox:
     if origin not in {"human", "agent"}:
         raise ValueError("Invalid message origin")
+    set_clinic(session, clinic_id)
     payload = {"conversation_id": str(conversation_id), "body": body, "actor_id": str(actor_id)}
     existing = session.scalar(
         select(Outbox).where(

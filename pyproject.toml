@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "celery[redis]>=5.4,<6",
+    "cryptography>=42,<51",
     "sqlalchemy>=2.0,<3",
     "alembic>=1.14,<2",
     "psycopg[binary]>=3.2,<4",

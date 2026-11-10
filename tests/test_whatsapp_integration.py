@@ -5,18 +5,20 @@ import os
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.orm import Session
 
+from alves_ia.ai import AIReply
 from alves_ia.config import get_settings
 from alves_ia.database import get_session, set_clinic
 from alves_ia.main import app as api_app
 from alves_ia.models import Clinic, User
 from alves_ia.whatsapp import processing
+from alves_ia.whatsapp.audio import AudioFile, Transcript
 from alves_ia.whatsapp.client import SendOutcome
 from alves_ia.whatsapp.handoff import HandoffAction
 from alves_ia.whatsapp.models import (
@@ -128,18 +130,18 @@ async def test_durable_receive_deduplication_window_and_tenant_isolation(
                 enqueue_text(
                     session,
                     clinic_id,
-                    conversation.id,
+                    conversation_id,
                     "Resposta do bot",
                     "bot-request",
                     uuid4(),
                     origin="agent",
                 )
-            first = enqueue_text(session, clinic_id, conversation.id, "Olá", "request-1", user_id)
-            again = enqueue_text(session, clinic_id, conversation.id, "Olá", "request-1", user_id)
+            first = enqueue_text(session, clinic_id, conversation_id, "Olá", "request-1", user_id)
+            again = enqueue_text(session, clinic_id, conversation_id, "Olá", "request-1", user_id)
             assert first.id == again.id
             message_id = first.id
             with pytest.raises(ValueError):
-                enqueue_text(session, clinic_id, conversation.id, "Diferente", "request-1", user_id)
+                enqueue_text(session, clinic_id, conversation_id, "Diferente", "request-1", user_id)
             session.commit()
         calls: list[str] = []
 
@@ -175,6 +177,119 @@ async def test_durable_receive_deduplication_window_and_tenant_isolation(
             session.commit()
         processing.process_job(str(clinic_id), str(bot_message_id))
         assert calls == ["sent", "sent"]
+
+        monkeypatch.setenv("AI_LIVE_ENABLED", "true")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        get_settings.cache_clear()
+
+        def audio_event(media_id: str, event_key: str) -> Event:
+            return Event(
+                phone_id=phone,
+                waba_id="123",
+                event_key=event_key,
+                payload={
+                    "kind": "messages",
+                    "data": {
+                        "id": f"wamid.{media_id}",
+                        "from": "5581999999999",
+                        "timestamp": str(int(datetime.now(UTC).timestamp())),
+                        "type": "audio",
+                        "audio": {
+                            "id": media_id,
+                            "mime_type": "audio/ogg; codecs=opus",
+                            "sha256": "0" * 64,
+                            "voice": True,
+                        },
+                    },
+                },
+            )
+
+        def ingest_audio(event: Event) -> tuple[UUID, str]:
+            with Session(app) as session:
+                set_clinic(session, clinic_id)
+                receive(session, [event])
+                session.commit()
+            with Session(app) as session, session.begin():
+                set_clinic(session, clinic_id)
+                inbox = session.scalar(select(Inbox).where(Inbox.event_key == event.event_key))
+                assert inbox is not None
+                job = session.scalar(select(Outbox).where(Outbox.key == f"ingest:{inbox.id}"))
+                assert job is not None
+                ingest(session, job)
+                return inbox.id, f"audio:{inbox.id}"
+
+        def fake_download(media_id: str, token: str, version: str) -> AudioFile:
+            return AudioFile(media_id.encode(), "audio/ogg", f"{media_id}.ogg")
+
+        def fake_transcribe(audio: AudioFile, api_key: str) -> Transcript:
+            if audio.filename.startswith("low-"):
+                return Transcript("Preciso de ajuda", -1.7)
+            return Transcript("Quero agendar para amanhã", -0.3)
+
+        class FakeProvider:
+            def reply(self, messages: list[dict[str, str]]) -> AIReply:
+                assert messages[-1]["content"] == "Quero agendar para amanhã"
+                return AIReply("Claro, vou ajudar com o agendamento.")
+
+        monkeypatch.setattr(processing, "download_audio", fake_download)
+        monkeypatch.setattr(processing, "transcribe_audio", fake_transcribe)
+        monkeypatch.setattr(processing, "create_provider", lambda: FakeProvider())
+
+        audio_inbox_id, audio_key = ingest_audio(audio_event("media-good", "c" * 64))
+        with Session(app) as session:
+            set_clinic(session, clinic_id)
+            audio_job = session.scalar(select(Outbox).where(Outbox.key == audio_key))
+            assert audio_job is not None
+            audio_job_id = audio_job.id
+        processing.process_job(str(clinic_id), str(audio_job_id))
+        agent_key = f"agent:{audio_inbox_id}"
+        with Session(app) as session:
+            set_clinic(session, clinic_id)
+            transcript = session.scalar(
+                select(ConversationMessage).where(
+                    ConversationMessage.source_inbox_id == audio_inbox_id,
+                    ConversationMessage.role == "user",
+                )
+            )
+            assert transcript is not None
+            assert transcript.content == "Quero agendar para amanhã"
+            agent_job = session.scalar(select(Outbox).where(Outbox.key == agent_key))
+            assert agent_job is not None
+            agent_job_id = agent_job.id
+        processing.process_job(str(clinic_id), str(agent_job_id))
+        with Session(app) as session:
+            set_clinic(session, clinic_id)
+            send_job = session.scalar(select(Outbox).where(Outbox.key == f"reply:{audio_inbox_id}"))
+            assert send_job is not None
+            send_job_id = send_job.id
+        processing.process_job(str(clinic_id), str(send_job_id))
+        assert calls == ["sent", "sent", "sent"]
+
+        low_inbox_id, low_key = ingest_audio(audio_event("low-confidence", "d" * 64))
+        with Session(app) as session:
+            set_clinic(session, clinic_id)
+            low_job = session.scalar(select(Outbox).where(Outbox.key == low_key))
+            assert low_job is not None
+            low_job_id = low_job.id
+        processing.process_job(str(clinic_id), str(low_job_id))
+        with Session(app) as session:
+            set_clinic(session, clinic_id)
+            conversation = session.get(Conversation, (clinic_id, conversation_id))
+            assert conversation is not None and conversation.state == "HUMAN_PENDING"
+            low_transcript = session.scalar(
+                select(ConversationMessage).where(
+                    ConversationMessage.source_inbox_id == low_inbox_id
+                )
+            )
+            assert low_transcript is None
+            handoff = session.scalar(
+                select(ConversationEvent).where(
+                    ConversationEvent.conversation_id == conversation_id,
+                    ConversationEvent.reason == "unclear_request",
+                )
+            )
+            assert handoff is not None
+
         if os.getenv("TEST_QUEUE") == "1":
             from alves_ia.whatsapp import tasks
 
