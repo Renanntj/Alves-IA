@@ -18,6 +18,8 @@ reais de pacientes. Esta demonstração não possui ferramentas nem realiza
 agendamentos; ela usa a integração textual existente, anterior à Fase 3.
 Não publique essa aplicação por proxy ou na internet. O acesso remoto e o
 ambiente de produção são bloqueados. Reinicie o processo ao alterar o `.env`.
+Esse laboratório também não acessa Google Sheets. `AI_LIVE_ENABLED` controla
+o agente do worker de WhatsApp e não habilita ferramentas no laboratório local.
 
 A fundação de autenticação/PostgreSQL da Fase 1 está em implementação.
 Consulte [configuração, validação e pendências](docs/phase-1.md) antes de executar.
@@ -51,7 +53,11 @@ uma conversa; o worker envia ao provedor somente as linhas encontradas. Valores
 da planilha são tratados como conteúdo não confiável. A agenda e os
 agendamentos continuam tendo o PostgreSQL como fonte oficial. Importação de
 Excel/CSV poderá ser adicionada depois. Veja o [guia de configuração e os
-limites de segurança](docs/google-sheets.md).
+limites de segurança](docs/google-sheets.md). A resposta
+`{"status":"configured"}` valida a leitura da faixa e os cabeçalhos. A
+consulta da planilha pelo agente está ligada ao fluxo de atendimento do worker;
+por enquanto, não existe uma rota conversacional para testar IA + planilha sem
+WhatsApp.
 
 Se o editor não resolver `from google import genai`, selecione o interpretador
 `.venv/bin/python` e instale as dependências nesse ambiente:
