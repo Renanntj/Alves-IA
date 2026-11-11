@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 import jwt
-from sqlalchemy import select
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from alves_ia.config import Settings, get_settings
@@ -129,31 +129,35 @@ def consume_authorization_state(
         raise PermissionError("invalid_oauth_state") from exc
 
     set_clinic(session, clinic_id)
-    row = session.scalar(
-        select(GoogleSheetsOAuthState)
+    row = session.execute(
+        delete(GoogleSheetsOAuthState)
         .where(
             GoogleSheetsOAuthState.clinic_id == clinic_id,
             GoogleSheetsOAuthState.nonce_hash == nonce_hash,
             GoogleSheetsOAuthState.user_id == user_id,
         )
-        .with_for_update()
-    )
-    membership = session.get(Membership, (clinic_id, user_id))
-    user = session.get(User, user_id)
-    if (
-        row is None
-        or row.expires_at <= datetime.now(UTC)
-        or not membership
-        or not membership.active
-        or membership.role not in {"admin", "manager"}
-        or not user
-        or not user.active
-    ):
+        .returning(
+            GoogleSheetsOAuthState.code_verifier_ciphertext,
+            GoogleSheetsOAuthState.expires_at,
+        )
+    ).one_or_none()
+    if row is None:
         session.rollback()
         raise PermissionError("invalid_oauth_state")
-    verifier = decrypt_refresh_token(row.code_verifier_ciphertext, _encryption_key(settings))
-    session.delete(row)
+    membership = session.get(Membership, (clinic_id, user_id))
+    user = session.get(User, user_id)
+    valid = (
+        row.expires_at > datetime.now(UTC)
+        and membership is not None
+        and membership.active
+        and membership.role in {"admin", "manager"}
+        and user is not None
+        and user.active
+    )
     session.commit()  # Consume one-use state before external token exchange.
+    if not valid:
+        raise PermissionError("invalid_oauth_state")
+    verifier = decrypt_refresh_token(row.code_verifier_ciphertext, _encryption_key(settings))
     return clinic_id, user_id, verifier
 
 
